@@ -1,56 +1,82 @@
-# Welcome to your Expo app 👋
+# Favour Fabrics — Mobile (Expo / React Native)
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Companion app for the Favour Fabrics web store. It shares the **same Supabase
+project** and the **same FastAPI backend** as the web app, so a user's account,
+cart, orders and profile are identical across both.
 
-## Get started
+## Shared backend (no duplicated data)
 
-1. Install dependencies
-
-   ```bash
-   npm install
-   ```
-
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
+```
+React Native (this app)
+      ↓ @supabase/supabase-js + AsyncStorage
+Supabase Auth          ← same project → same user.id as the web app
+      ↓
+Supabase Postgres      ← profiles, products, orders, carts, cart_items
+      ↓ (only for Paystack verification / initialization)
+FastAPI backend        ← https://favour-fabrics.onrender.com
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+There is **no mobile-specific auth or database**. Signing in with the same
+Google account (or email/password) gives the same `user_id`, which is what makes
+the **cart sync** between web and mobile work.
 
-### Other setup steps
+## Cart behaviour
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+- **Guest** → stored locally (`AsyncStorage`)
+- **Signed in** → stored in Supabase `carts` / `cart_items` (RLS: owner-only)
+- **On sign-in** → the guest cart is merged into the server cart
 
-## Learn more
+## Screens
 
-To learn more about developing your project with Expo, look at the following resources:
+| Route | Description |
+|---|---|
+| `/(tabs)` | Shop — products grid + category filter |
+| `/product/[id]` | Product detail |
+| `/(tabs)/cart` | Cart (synced) |
+| `/checkout` | Checkout — Paystack (hosted) or bank transfer |
+| `/order-confirmation` | Success |
+| `/(tabs)/orders` | Order history |
+| `/(tabs)/account` | Profile / sign out |
+| `/login` | Google + email/password |
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+## Environment
 
-## Join the community
+`.env` (public values only — safe to ship):
 
-Join our community of developers creating universal apps.
+```
+EXPO_PUBLIC_SUPABASE_URL=
+EXPO_PUBLIC_SUPABASE_ANON_KEY=
+EXPO_PUBLIC_API_URL=
+EXPO_PUBLIC_PAYSTACK_PUBLIC_KEY=
+EXPO_PUBLIC_BANK_NAME=
+EXPO_PUBLIC_ACCOUNT_NAME=
+EXPO_PUBLIC_ACCOUNT_NUMBER=
+```
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+## Run
+
+```bash
+npm install
+npx expo start
+```
+
+## Deep link / OAuth
+
+App scheme: `favourfabrics`. Add these to Supabase →
+**Authentication → URL Configuration → Redirect URLs**:
+
+```
+favourfabrics://**
+exp://**        # for Expo Go during development
+```
+
+## Getting a build
+
+```bash
+npx eas build --profile development --platform android   # dev build
+npx eas build --profile production  --platform android   # store build
+```
+
+> Card checkout uses Paystack's **hosted checkout** (the app asks the backend to
+> initialize a transaction with the secret key, then opens the returned URL) —
+> no native Paystack SDK required.
