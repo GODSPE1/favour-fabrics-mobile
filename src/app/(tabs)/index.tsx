@@ -10,7 +10,7 @@ import {
 import { Ionicons } from '@expo/vector-icons'
 import { router } from 'expo-router'
 import { ProductCard } from '@/components/ProductCard'
-import { api } from '@/lib/api'
+import { listProducts } from '@/lib/products'
 import { useCart } from '@/lib/cart'
 import { colors, radius } from '@/lib/theme'
 import type { Product } from '@/lib/types'
@@ -33,8 +33,7 @@ export default function ShopScreen() {
   const load = useCallback(async (cat: string) => {
     setError(null)
     try {
-      const data = await api.get(`/api/products${cat ? `?category=${cat}` : ''}`)
-      setProducts(Array.isArray(data) ? (data as Product[]) : [])
+      setProducts(await listProducts(cat || undefined))
     } catch (e) {
       setError((e as Error).message)
     }

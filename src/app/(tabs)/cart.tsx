@@ -1,14 +1,23 @@
+import { useCallback } from 'react'
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native'
 import { Image } from 'expo-image'
 import { Ionicons } from '@expo/vector-icons'
-import { router } from 'expo-router'
+import { router, useFocusEffect } from 'expo-router'
 import { Button } from '@/components/Button'
 import { useCart } from '@/lib/cart'
 import { formatNaira } from '@/lib/format'
+import { resolveImageUrl } from '@/lib/images'
 import { colors, radius } from '@/lib/theme'
 
 export default function CartScreen() {
-  const { items, updateQuantity, removeItem, totalAmount, isHydrated } = useCart()
+  const { items, updateQuantity, removeItem, totalAmount, isHydrated, refresh } = useCart()
+
+  // Pull the latest server cart every time this tab is focused.
+  useFocusEffect(
+    useCallback(() => {
+      refresh()
+    }, [refresh])
+  )
 
   if (!isHydrated) {
     return (
@@ -40,7 +49,11 @@ export default function CartScreen() {
         showsVerticalScrollIndicator={false}
         renderItem={({ item }) => (
           <View style={styles.card}>
-            <Image source={{ uri: item.image_url }} style={styles.thumb} contentFit="cover" />
+            <Image
+              source={{ uri: resolveImageUrl(item.image_url) }}
+              style={styles.thumb}
+              contentFit="cover"
+            />
             <View style={styles.info}>
               <View style={styles.topRow}>
                 <Text numberOfLines={1} style={styles.name}>

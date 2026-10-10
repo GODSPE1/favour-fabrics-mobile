@@ -4,9 +4,10 @@ import { Image } from 'expo-image'
 import { Ionicons } from '@expo/vector-icons'
 import { router, useLocalSearchParams } from 'expo-router'
 import { Button } from '@/components/Button'
-import { api } from '@/lib/api'
+import { getProduct } from '@/lib/products'
 import { useCart } from '@/lib/cart'
 import { formatNaira } from '@/lib/format'
+import { resolveImageUrl } from '@/lib/images'
 import { colors, radius } from '@/lib/theme'
 import type { Product } from '@/lib/types'
 
@@ -22,9 +23,8 @@ export default function ProductDetailScreen() {
   useEffect(() => {
     if (!id) return
     let cancelled = false
-    api
-      .get(`/api/products/${id}`)
-      .then((d) => !cancelled && setProduct(d as Product))
+    getProduct(id)
+      .then((d) => !cancelled && setProduct(d))
       .catch((e) => !cancelled && setError((e as Error).message))
       .finally(() => !cancelled && setLoading(false))
     return () => {
@@ -69,7 +69,11 @@ export default function ProductDetailScreen() {
     <View style={styles.root}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
         <View style={styles.imageWrap}>
-          <Image source={{ uri: product.image_url }} style={styles.image} contentFit="cover" />
+          <Image
+            source={{ uri: resolveImageUrl(product.image_url) }}
+            style={styles.image}
+            contentFit="cover"
+          />
           <Pressable style={styles.back} onPress={() => router.back()} hitSlop={10}>
             <Ionicons name="arrow-back" size={20} color={colors.text} />
           </Pressable>

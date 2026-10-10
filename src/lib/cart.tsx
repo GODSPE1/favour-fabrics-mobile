@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useEffect, useRef, useState } from 'react'
+import React, { createContext, useCallback, useContext, useEffect, useState } from 'react'
+import { AppState } from 'react-native'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { supabase } from './supabase'
 import { useAuth } from './auth'
@@ -22,6 +23,7 @@ type CartContextValue = {
   removeItem: (productId: string) => void
   updateQuantity: (productId: string, quantity: number) => void
   clearCart: () => void
+  refresh: () => Promise<void>
   totalAmount: number
   itemCount: number
 }
@@ -87,7 +89,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const { user, loading: authLoading } = useAuth()
   const [items, setItems] = useState<CartItem[]>([])
   const [isHydrated, setIsHydrated] = useState(false)
-  const cartIdRef = useRef<string | null>(null)
+  const [cartId, setCartId] = useState<string | null>(null)
 
   useEffect(() => {
     if (authLoading) return
@@ -100,9 +102,9 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         try {
           const local = await readLocal()
           const serverItems = await fetchServerItems(user.id)
-          const cartId = await ensureCart(user.id)
+          const id = await ensureCart(user.id)
           if (cancelled) return
-          cartIdRef.current = cartId
+          setCartId(id)
 
           let merged = serverItems
           if (local.length > 0) {
@@ -112,7 +114,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
                 supabase
                   .from('cart_items')
                   .upsert(
-                    { cart_id: cartId, product_id: i.id, quantity: i.quantity },
+                    { cart_id: id, product_id: i.id, quantity: i.quantity },
                     { onConflict: 'cart_id,product_id' }
                   )
               )
@@ -125,7 +127,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
           if (!cancelled) setItems(await readLocal())
         }
       } else {
-        cartIdRef.current = null
+        setCartId(null)
         setItems(await readLocal())
       }
 
@@ -138,34 +140,74 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
     }
   }, [user, authLoading])
 
+  /* ---- refresh from Supabase (picks up changes made on the web) ---- */
+  const refresh = useCallback(async () => {
+    if (authLoading) return
+    if (user) {
+      try {
+        setItems(await fetchServerItems(user.id))
+      } catch (err) {
+        console.error('[cart] refresh failed', err)
+      }
+    } else {
+      setItems(await readLocal())
+    }
+  }, [user, authLoading])
+
+  // Refresh whenever the app returns to the foreground (e.g. after using the website).
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') refresh()
+    })
+    return () => sub.remove()
+  }, [refresh])
+
+  // Live updates: any cart_items change for this cart triggers a refetch.
+  useEffect(() => {
+    if (!user || !cartId) return
+    const channel = supabase
+      .channel(`cart-${cartId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'cart_items', filter: `cart_id=eq.${cartId}` },
+        () => {
+          refresh()
+        }
+      )
+      .subscribe()
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [user, cartId, refresh])
+
   const persistLocal = (next: CartItem[]) => {
     if (!user) void writeLocal(next)
   }
   const serverUpsert = (productId: string, quantity: number) => {
-    if (!user || !cartIdRef.current) return
+    if (!user || !cartId) return
     supabase
       .from('cart_items')
       .upsert(
-        { cart_id: cartIdRef.current, product_id: productId, quantity },
+        { cart_id: cartId, product_id: productId, quantity },
         { onConflict: 'cart_id,product_id' }
       )
       .then(({ error }) => error && console.error('[cart] upsert', error))
   }
   const serverDelete = (productId: string) => {
-    if (!user || !cartIdRef.current) return
+    if (!user || !cartId) return
     supabase
       .from('cart_items')
       .delete()
-      .eq('cart_id', cartIdRef.current)
+      .eq('cart_id', cartId)
       .eq('product_id', productId)
       .then(({ error }) => error && console.error('[cart] delete', error))
   }
   const serverClear = () => {
-    if (!user || !cartIdRef.current) return
+    if (!user || !cartId) return
     supabase
       .from('cart_items')
       .delete()
-      .eq('cart_id', cartIdRef.current)
+      .eq('cart_id', cartId)
       .then(({ error }) => error && console.error('[cart] clear', error))
   }
 
@@ -213,6 +255,7 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         removeItem,
         updateQuantity,
         clearCart,
+        refresh,
         totalAmount,
         itemCount,
       }}

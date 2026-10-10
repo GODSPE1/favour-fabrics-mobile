@@ -4,6 +4,7 @@ import { Image } from 'expo-image'
 import { Ionicons } from '@expo/vector-icons'
 import { router } from 'expo-router'
 import { formatNaira } from '@/lib/format'
+import { resolveImageUrl } from '@/lib/images'
 import { colors, radius } from '@/lib/theme'
 import type { Product } from '@/lib/types'
 
@@ -23,7 +24,7 @@ export function ProductCard({
     >
       <View style={styles.imageWrap}>
         <Image
-          source={{ uri: product.image_url }}
+          source={{ uri: resolveImageUrl(product.image_url) }}
           style={styles.image}
           contentFit="cover"
           transition={200}
